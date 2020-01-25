@@ -1,0 +1,284 @@
+---
+title: "Homework 2"
+author: "Alex Soupir"
+date: "January 24, 2020"
+output:
+  pdf_document:
+    keep_md: true
+    df_print: paged
+---
+
+*Packages*: ISLR, ggplot2, MASS
+
+*Collaborators*: 
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+false=FALSE
+```
+
+
+
+Answer all questions specified on the problem and include a discussion on how your results answered/addressed the question.
+
+Submit your \textbf{.rmd} file with the knitted \textbf{PDF} (or knitted Word Document saved as a PDF). If you are having trouble with .rmd, let us know and we will help you, but both the .rmd and the PDF are required.
+
+This file can be used as a skeleton document for your code/write up. Please follow the instructions found under Content for Formatting and Guidelines. No code should be in your PDF write-up unless stated otherwise.
+
+For any question asking for plots/graphs, please do as the question asks as well as do the same but using the respective commands in the GGPLOT2 library. (So if the question asks for one plot, your results should have two plots. One produced using the given R-function and one produced from the GGPLOT2 equivalent). This doesn't apply to questions that don't specifically ask for a plot, however I still would encourage you to produce both.
+
+You do not need to include the above statements.
+
+Please do the following problems from the text book ISLR.
+
+1. Question 3.7.5 pg 121
+
+Show that we can write the equation - Page 2
+
+![Question 5](Q3.7.5_soupir.jpg){#id .class width=50% height=50%}
+
+2. Question 3.7.10 pg 123
+
+This question should be answered using the ```Carseats``` data set.
+
+  a) Fit a multiple regression model to predict ```Sales``` using ```Price```, ```Urban```, and ```US```.
+
+```{r,include=FALSE,warning=F,message=F}
+#insert code here!
+library(ISLR)
+Carseats = Carseats
+
+model2.a = lm(Sales~Price+Urban+US, data=Carseats)
+```
+  
+  b) Provide an interpretation of each coefficient in the model. Be careful - some of the variables in the model are qualitative!
+
+```{r,echo=FALSE,warning=F,message=F}
+#insert code here!
+summary(model2.a)
+```
+
+**For price, there seems to be a significant relationship. As the price increases, the sales of that car seat decreases (for every increase in price by 1, sales decreases by 54 seats for that location). For Urban - Yes, the p-value is not significant and therefore whether the location is urban or not doesn't significant contribute to this model. Finally, US - Yes, the p-value is significant indicating there is a relationship, and if the location is in the US sales will increase since the coefficient is positive (since sales are in the thousands and the coefficient for US - Yes is 1.2006, it would be expected that the sales will increase by 1200 seats if being sold in the US.**
+  
+  c) Write out the model equation form, being careful to handle the qualitative variables properly.
+
+**Car seat sales = 13.04 + Price * -0.054 + UrbanYes * -0.022 + USYes * 1.2006. **
+  
+  d) For which of the predictors can you reject the null hypothesis that the coefficient is equal to 0?
+
+**The predictors that we can reject the null hypothesis that the coefficient is equal to 0, is for the *Price* and *USYes* coefficients**
+  
+  e) On the basis of your response to part D, fit a smaller model that only uses the predictors for which there is evidence of association with the outcome.
+
+```{r,include=FALSE,warning=F,message=F}
+#insert code here!
+model2.e = lm(Sales~Price+US, data=Carseats)
+```
+
+```{r,echo=FALSE,warning=F,message=F}
+#insert code here!
+summary(model2.e)
+```
+  
+  f) How well do the models in part A and part E fit the data?
+
+**Both models have R^2^ of 0.2393 so they both fit the data in a similar way. However, the F-statistic is greater for the part E model so it is slightly better. The F-statistic shows more insight to the model than does the p-value of the model because the p-values in R can only display 2.2e-16, and they both show that.**
+  
+  g) Using the model from part E, obtain 95% confidence intervals for each of the coefficient(s).
+
+```{r,include=FALSE,warning=F,message=F}
+#insert code here!
+confint(model2.e)
+```
+  
+  h) Is there evidence of outliers or high leverage observations in the model from part E?
+
+```{r,echo=FALSE,warning=F,message=F}
+#insert code here!
+#par(mfrow=c(2,2))
+plot(model2.e, which=1)
+
+library(ggplot2)
+
+ggplot(model2.e, aes(x=.fitted, y=.resid)) + geom_point() + labs(title="Residual vs Fitted", x="Fitted values", y="Residuals")
+```
+
+**With the model created in part E, there are a few value that are outliers.**
+
+3. Question 3.7.15 pg 126
+
+This problem involves the ```Boston``` data set, which we saw in the lab for this chapter. We will now try to predict per capita crime rate using the other variables in this data set. In other words, per capita crime is the response, and the other variables are the predictors.
+
+  a) For each predictor, fit a simple linear regression model to predict the response. Describe your results. In which of the models is there a statistically significant association between the predictor and the response? Create some plots to back up your assertions.
+
+```{r, echo=FALSE}
+library(MASS)
+Boston = Boston
+colnames(Boston)
+```
+
+```{r, echo=FALSE}
+boston.zn = lm(crim~zn, data=Boston)
+boston.indus = lm(crim~indus, data=Boston)
+boston.chas = lm(crim~chas, data=Boston)
+boston.nox = lm(crim~nox, data=Boston)
+boston.rm = lm(crim~rm, data=Boston)
+boston.age = lm(crim~age, data=Boston)
+boston.dis = lm(crim~dis, data=Boston)
+boston.rad = lm(crim~rad, data=Boston)
+boston.tax = lm(crim~tax, data=Boston)
+boston.ptratio = lm(crim~ptratio, data=Boston)
+boston.black = lm(crim~black, data=Boston)
+boston.lstat = lm(crim~lstat, data=Boston)
+boston.medv = lm(crim~medv, data=Boston)
+```
+
+```{r, echo=FALSE}
+cat("Crime predicted by residential land zoned for lots over 25k sq.ft\n")
+summary(boston.zn)$coeff
+cat("Crime predicted by proportion of non-retail business per acre\n")
+summary(boston.indus)$coeff
+cat("Crime predicted by Charles river dummy variable\n")
+summary(boston.chas)$coeff
+cat("Crime predicted by nitrogen oxides concentration\n")
+summary(boston.nox)$coeff
+cat("Crime predicted by average number of rooms per dwelling\n")
+summary(boston.rm)$coeff
+cat("Crime predicted by proportion of owner-occupied unites built before 1940\n")
+summary(boston.age)$coeff
+cat("Crime predicted by weighted mean of distance to Boston employment centers\n")
+summary(boston.dis)$coeff
+cat("Crime predicted by index of accessibility to radial highways\n")
+summary(boston.rad)$coeff
+cat("Crime predicted by full-value property-tax rate\n")
+summary(boston.tax)$coeff
+cat("Crime predicted by pupil-teacher ratio\n")
+summary(boston.ptratio)$coeff
+cat("Crime predicted by proportion of blacks by town\n")
+summary(boston.black)$coeff
+cat("Crime predicted by lower status of the population\n")
+summary(boston.lstat)$coeff
+cat("Crime predicted by median value of owner-occupied homes\n")
+summary(boston.medv)$coeff
+```
+
+```{r, echo=false}
+plot(boston.tax, which=1)
+plot(boston.chas, which=1)
+
+ggplot(boston.tax, aes(x=.fitted, y=.resid)) + geom_point() + labs(title="Residual vs Fitted (tax)", x="Fitted values", y="Residuals")
+ggplot(boston.chas, aes(x=.fitted, y=.resid)) + geom_point() + labs(title="Residual vs Fitted (chas)", x="Fitted values", y="Residuals")
+```
+
+**From looking at the summary of all the models, the Charles River dummy variable is the only one that doesn't show a strong relationship to crime. **
+  
+  b) Fit a multiple regression model to predict the response using all the predictors. Describe your results. For which predictors can we reject the null hypothesis that the coefficient is equal to 0?
+
+```{r, echo=false}
+boston.model = lm(crim~., data=Boston)
+summary(boston.model)
+```
+
+**The results for the linear model using all of the variables to predict the per capita crime rate shows the predictors have different impacts than when they were used individually. When looking at each of the variables as predictors for the crime rate per capita, only the *chas* variable wasn't significantly related to crime, but now combining all of the variables, *indus*, *rm*, *age*, *tax*, and *ptratio* are also not contributing significantly to the model (coefficients are not significant and therefore we cannot say that their coefficients are different from zero). We can say that *zn*, *nox*, *dis*, *rad*, *black*, *lstat*, and *medv* are significant and reject the hypthesis that their coefficients in THIS model are different from zero. This is much like what Cami talked about in her P-value video where although they are not significant in this particular model, does not mean that given a different combination of variables as predictors they wouldn't be significant.**
+  
+  c) How do your results from part A compare to your results form part B? Create a plot displaying the univariate regression coefficients from part A on the x-axis, and the multiple regression coefficients from part B on the y-axis. That is, each predictor displayed as a single point in the plot. Its coefficient in a simple linear regression model is shown on the x-axis, and its coefficient estimate in the multiple linear regression model is shown on the y-axis.
+
+```{r, echo=false}
+x = c(summary(boston.zn)$coeff[2],
+      summary(boston.indus)$coeff[2],
+      summary(boston.chas)$coeff[2],
+      summary(boston.nox)$coeff[2],
+      summary(boston.rm)$coeff[2],
+      summary(boston.age)$coeff[2],
+      summary(boston.dis)$coeff[2],
+      summary(boston.rad)$coeff[2],
+      summary(boston.tax)$coeff[2],
+      summary(boston.ptratio)$coeff[2],
+      summary(boston.black)$coeff[2],
+      summary(boston.lstat)$coeff[2],
+      summary(boston.medv)$coeff[2]
+)
+y = summary(boston.model)$coeff[2:14]
+plot(x,y, main="Scatter plot of univariate and multivariate coefficients")
+df = data.frame(x, y)
+ggplot(df, aes(x=x, y=y))+geom_point()+labs(title="Scatter plot of univariate and multivariate coefficients")
+```
+
+**There are some differences between the univariate and multiple regression coefficients, most notably for *nox* which had a positive coefficient in the model where it was the only predictor, but in the model where its combined with other variables to predict the crime rate it become a negative coefficient. The variable *rm* also deviates more from the x=y line with it having been negative as a univariate and positive (0.4) in the multiple regression model. Most of the other variables fall close to a x=y line.**
+  
+  d) Is there evidence of non-linear association between any of the predictors and the response? To answer this question, for each predictor X, fit a model y = B0 + B1 * X + B2 * X^2 + B3 * X^3 + e.
+
+```{r,echo=FALSE,warning=F,message=F}
+#insert code here!
+boston.zn2 = lm(crim~poly(zn,3), data=Boston)
+boston.indus2 = lm(crim~poly(indus,3), data=Boston)
+boston.nox2 = lm(crim~poly(nox,3), data=Boston)
+boston.rm2 = lm(crim~poly(rm,3), data=Boston)
+boston.age2 = lm(crim~poly(age,3), data=Boston)
+boston.dis2 = lm(crim~poly(dis,3), data=Boston)
+boston.rad2 = lm(crim~poly(rad,3), data=Boston)
+boston.tax2 = lm(crim~poly(tax,3), data=Boston)
+boston.ptratio2 = lm(crim~poly(ptratio,3), data=Boston)
+boston.black2 = lm(crim~poly(black,3), data=Boston)
+boston.lstat2 = lm(crim~poly(lstat,3), data=Boston)
+boston.medv2 = lm(crim~poly(medv,3), data=Boston)
+```
+
+```{r, echo=FALSE}
+cat("Crime predicted by residential land zoned for lots over 25k sq.ft\n")
+summary(boston.zn2)$coeff
+cat("Crime predicted by proportion of non-retail business per acre\n")
+summary(boston.indus2)$coeff
+cat("Crime predicted by nitrogen oxides concentration\n")
+summary(boston.nox2)$coeff
+cat("Crime predicted by average number of rooms per dwelling\n")
+summary(boston.rm2)$coeff
+cat("Crime predicted by proportion of owner-occupied unites built before 1940\n")
+summary(boston.age2)$coeff
+cat("Crime predicted by weighted mean of distance to Boston employment centers\n")
+summary(boston.dis2)$coeff
+cat("Crime predicted by index of accessibility to radial highways\n")
+summary(boston.rad2)$coeff
+cat("Crime predicted by full-value property-tax rate\n")
+summary(boston.tax2)$coeff
+cat("Crime predicted by pupil-teacher ratio\n")
+summary(boston.ptratio2)$coeff
+cat("Crime predicted by proportion of blacks by town\n")
+summary(boston.black2)$coeff
+cat("Crime predicted by lower status of the population\n")
+summary(boston.lstat2)$coeff
+cat("Crime predicted by median value of owner-occupied homes\n")
+summary(boston.medv2)$coeff
+```
+
+**The variable *chas* doesn't allow for the *poly(chas,3)* function. There is evidence for non-linear relationships between certain variables and the crime rate per capita in this data. The variables with poly 3 coeffiences that are significant and thus different from zero are *indus*, *nox*, *age*, *dis*, *ptratio*, and *medv*. Beyond that, there are variables that show poly 2 coeffients that are significant and therefore different from 0 which are *zn*, *rm*, *rad*, *tax*, and *lstat*. The only variable that didn't have a coefficent at poly 2 or 3 that didn't reject the null hypothesis was *black*, although *chas* wasn't able to be run with poly so there is no evidence for this variable that it has a non-linear relationship with crime. **
+
+References:
+
++ STHDA.com
++ R-bloggers.com
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
