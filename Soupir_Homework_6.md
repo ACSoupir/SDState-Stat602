@@ -9,7 +9,7 @@ output:
 urlcolor: blue
 ---
 
-*Packages*: ISLR
+*Packages*: ISLR, class, MASS, mclust
 
 *Collaborators*: 
 
@@ -76,25 +76,25 @@ In Chapter 4, we used logistic regression to predict the probability of `default
     
 
 ```
-## [1] 0.9720812
+## [1] 0.02791878
 ```
     
   (c) Repeat the process in (b) three times, using three different splits of the observations into a training set and validation set. Comment on the results obtained.
   
-  **Maybe easier to use a function to run this 3 times?**
-  
 
 ```
-## [1] 0.9720812
-## [1] 0.9699746
-## [1] 0.9769585
+## [1] 0.02791878
+## [1] 0.03002545
+## [1] 0.02304147
 ```
+
+**The error is very consistent between the different splits of the data. This is the error of those that are misclassified**
   
   (d) Now consider a logistic regression model that predicts the probability of `default` using `income`, `balance`, and a dummy variable for `student`. Estimate the test error for this model using the vaidation set approach. Comment on whether or not including a dummy variable for `student` leads to a reduction in the test error rate.
   
 
 ```
-## [1] 0.9720812
+## [1] 0.02791878
 ```
 
 **Adding the variable for student produces similar (same) error when setting the seed to the same one as used in (b). This suggests that the dummy variable doesn't reduce the error test rate when included.**
@@ -182,12 +182,188 @@ mean(error)
 ## [1] 24.67371
 ```
 
+\newpage
 
 5. Last homework you started analyzing the dataset you chose from [this website](https://archive.ics.uci.edu/ml/datasets.html). Now continue the analysis and perform Logistic Regression, KNN, LDA, QDA, MclustDA, MclustDA with EDDA if appropriate. If it is not possible to perform any of the methods mentioned above please justify why.
+
+**The data has 6 columns: BIRADS is the assessment provided by double-review process with physicians with 1 being benign and 5 being most likely malignant, Age of the patient, Shape of the mass which is a factor and not integer, Margin of the mass which is also nominal, Density of the mass which is most likely a factor based on the description [high=1, iso=2, low=3 fat-containing=4], and Severity of the mass with 0 being benign and 1 being malignant.**
+  
+<div data-pagedtable="false">
+  <script data-pagedtable-source type="application/json">
+{"columns":[{"label":[""],"name":["_rn_"],"type":[""],"align":["left"]},{"label":["BIRADS"],"name":[1],"type":["int"],"align":["right"]},{"label":["Age"],"name":[2],"type":["int"],"align":["right"]},{"label":["Shape"],"name":[3],"type":["int"],"align":["right"]},{"label":["Margin"],"name":[4],"type":["int"],"align":["right"]},{"label":["Density"],"name":[5],"type":["int"],"align":["right"]},{"label":["Severity"],"name":[6],"type":["int"],"align":["right"]}],"data":[{"1":"5","2":"67","3":"3","4":"5","5":"3","6":"1","_rn_":"1"},{"1":"4","2":"43","3":"1","4":"1","5":"NA","6":"1","_rn_":"2"},{"1":"5","2":"58","3":"4","4":"5","5":"3","6":"1","_rn_":"3"},{"1":"4","2":"28","3":"1","4":"1","5":"3","6":"0","_rn_":"4"},{"1":"5","2":"74","3":"1","4":"5","5":"NA","6":"1","_rn_":"5"},{"1":"4","2":"65","3":"1","4":"NA","5":"3","6":"0","_rn_":"6"}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
+  </script>
+</div>
+
+**Since there are a fair amount of observations with `na`, I'll remove those that are not complete cases. Even though BIRADS is not a predictor, I want to make sure that the values are there for comparison in the future.**
+  
+
+
+### Logistic Regression - LOOCV
+  
+
+```
+## [1] 0.186747
+```
+
+### KNN
+  
+
+  
+
+```
+## Error rate for KNN (seed 702) (K =1):[1] 0.2590361
+## Error rate for KNN (seed 702) (K =2):[1] 0.2409639
+## Error rate for KNN (seed 702) (K =3):[1] 0.2289157
+## Error rate for KNN (seed 702) (K =4):[1] 0.2289157
+## Error rate for KNN (seed 702) (K =5):[1] 0.2228916
+## Error rate for KNN (seed 702) (K =6):[1] 0.2409639
+## Error rate for KNN (seed 702) (K =7):[1] 0.2349398
+## Error rate for KNN (seed 702) (K =8):[1] 0.2409639
+## Error rate for KNN (seed 702) (K =9):[1] 0.246988
+## Error rate for KNN (seed 702) (K =10):[1] 0.2409639
+## Error rate for KNN (seed 702) (K =11):[1] 0.2349398
+## Error rate for KNN (seed 702) (K =12):[1] 0.2349398
+## Error rate for KNN (seed 702) (K =13):[1] 0.2349398
+## Error rate for KNN (seed 702) (K =14):[1] 0.2349398
+## Error rate for KNN (seed 702) (K =15):[1] 0.2349398
+## Error rate for KNN (seed 702) (K =16):[1] 0.2349398
+## Error rate for KNN (seed 702) (K =17):[1] 0.2349398
+## Error rate for KNN (seed 702) (K =18):[1] 0.2349398
+## Error rate for KNN (seed 702) (K =19):[1] 0.2349398
+## Error rate for KNN (seed 702) (K =20):[1] 0.2349398
+```
+
+```
+## Minimum error was produced using k=5 with an error of 0.2228916
+```
+
+### LDA
+  
+
+```
+## Error rate for LDA on test split (seed 702):
+```
+
+```
+## [1] 0.2349398
+```
+
+### QDA
+  
+
+```
+## Error rate for QDA on test split (seed 702):
+```
+
+```
+## [1] 0.2349398
+```
+
+### MclustDA
+  
+
+```
+##      Predicted
+## Class   0   1
+##     0 215 126
+##     1  23 300
+```
+
+```
+## Error rate for MclustDA on test split (seed 702):
+```
+
+```
+## [1] 0.2243976
+```
+
+### MclustDA with EDDA
+  
+
+```
+##      Predicted
+## Class   0   1
+##     0 253  88
+##     1  43 280
+```
+
+```
+## Error rate for MclustDA on test split (seed 702):
+```
+
+```
+## [1] 0.1972892
+```
+
+### Doctors comparison
+
+**To compare to what the double-review by doctors predicted, I decided to look at their assessment. To do this, I first looked at the summary of the 2 factor variables BIRADS and Severity. This shows that there are more actual benign diagnoses than malignant, however doctors weighed more towards a diagnosis of malignant. This may be because it's better to be safe than sorry in diagnoses and determining a mammogram mass as benign when it is malignant can be dangerous. Next, I created a confusion matrix where I converted BIRADS assessment values of 4 and 5 to malignant and 1 through 3 as benign. The error of thesse predictions was incredibly high due to the doctors pushing towards malignant. However, only converting an assessment of 5 to malignant lowered the error from 0.49 (BIRADS 4 and 5 as malignant) to 0.17 (BIRADS 5 as malignant).**
+
+**These errors are on both extremes of the methods tested above, with the BIRADS 4 and 5 having at least 2x the error than any of the methods and BIRADS 5 having lower error than any of the methods. Of the methods tested above, the logistic regression produced the lowest error with LOOCV (0.186747). Following this, the next lowest error was produced with KNN where k=5 (0.2228916), then the MclustDA with EDDA model type (0.1972892) and MclustDA default model type was slightly higher (0.2243976). QDA (0.2349398) and LDA (0.2349398) were the worst in terms of error in their predictions. **
+
+
+```
+## Summary of the BIRADS factor by doctors:
+```
+
+```
+##   0   2   3   4   5 
+##   5   7  24 468 316
+```
+
+```
+## Summary of the actual diagnoses:
+```
+
+```
+##   0   1 
+## 425 395
+```
+
+```
+## 
+## Confusion matrix of the BIRADS assessment by doctors (>3 is malignant):
+```
+
+```
+##    docs
+##       0   1
+##   0  29 396
+##   1   7 388
+```
+
+```
+## Error of doctor prediction (BIRAD>3 = Malignant):
+```
+
+```
+## [1] 0.4914634
+```
+
+```
+## 
+## Confusion matrix of the BIRADS assessment by doctors (>4 is malignant):
+```
+
+```
+##    docs
+##       0   1
+##   0 394  31
+##   1 110 285
+```
+
+```
+## Error of doctor prediction (BIRAD>4 = Malignant):
+```
+
+```
+## [1] 0.1719512
+```
 
 References
 
 + ISLR Book
++ Stackoverflow
 + 
 
 
