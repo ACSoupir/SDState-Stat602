@@ -1,0 +1,920 @@
+---
+title: "STAT 602 - Final Project"
+author: "Alex Soupir"
+date: "April 25, 2020"
+output:
+  pdf_document:
+    keep_md: true
+    df_print: paged
+urlcolor: blue
+---
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+false = FALSE
+true = TRUE
+```
+
+**Libraries used: MASS, foreach, doParallel, knitr, kableExtra, MNLpred, nnet, neuralnet, class, featuretoolsR (some backend python code with reticulate needs to be fixed), magrittr, matrixStats, and e1071**
+
+```{r load_packages, echo=false, message=false, warning=false}
+library(foreach)
+library(doParallel)
+crs = detectCores()-1
+crs = 1
+registerDoParallel(crs)
+library(MASS)
+library(knitr)
+library(kableExtra)
+library(MNLpred)
+library(nnet)
+library(neuralnet)
+library(class)
+#library(featuretoolsR)
+library(magrittr)
+library(matrixStats)
+library(e1071)
+
+accuracies = data.frame()
+```
+
+The data being explored in this document is from handwriting of 40 different people (subjects) writing 6 different phrases (conditions) 3 times each and in both cursive and print (group) measured with the *MovAlyzeR*. This document outlines some exploration to find out if there is reason to believe further work is reasonable or time-worthy (*skunk work*) and not a full on analysis itself. *Accuracies were measured by dividing the number of correct predictions by the total number of predictions. Here, predictions are important and will be used as the metric for model performance.*
+
+Initially, the data frame included all of the different "*Segments*" broken down by the direction of the writing, but the mean of all fo the different trials (each combination of subject + condition + group + replication) was taken as a baseline for predictions. With the new summary data where each row is a unique replication. These values were than checked for values that are only zero's and removed. These variables are `RelativeDurationofPrimary`, and `RelativeSizeofPrimary`.
+
+```{r importing_labeled_data, echo=false, cache=true}
+lab.dat = read.csv("labeled.csv", stringsAsFactors = F)
+lab.dat = lab.dat[,-1]
+```
+
+```{r cps_data_means, echo=false}
+set.seed(333)
+
+trn.dat.means=NULL
+inde.vars=NULL
+
+index.var=apply(lab.dat[,1:4], 1, paste, collapse=":")
+group.subject = apply(lab.dat[,1:2], 1, paste, collapse=":")
+
+uni.vars = unique(index.var)
+ind.gro.sub = unique(group.subject)
+
+trn.dat.means = foreach(i = 1:length(uni.vars), .combine=rbind) %dopar% {
+  trn.dat.i=lab.dat[uni.vars[i]==index.var, ]
+  colMeans(trn.dat.i[,-(1:5)])
+  #inde.vars=rbind(inde.vars, trn.dat.i[1,(1:4)])
+  #trn.dat.means=rbind(trn.dat.means, trn.mean.i)
+}
+inde.vars = foreach(i = 1:length(uni.vars), .combine=rbind) %dopar% {
+  trn.dat.i=lab.dat[uni.vars[i]==index.var, ]
+  trn.dat.i[1,(1:4)]
+}
+```
+
+```{r remove_columns, echo=false}
+set.seed(333)
+trn.dat.means2=trn.dat.means[, -c(13, 14)]
+
+trn.dat.means3=trn.dat.means2[, -c(4,6,18,19,21,22,23)]
+```
+
+Since from the in class 'Playing with Data' we got some benchmark accuracies from linear discriminate analysis and quadratic discriminate analysis using the principal components of the remaining variables for the different response variables `group`, `subject`, `condition`, and `joint` which is the combination of all 3. **It's important to note that the model for the joint variables doesn't seem to work for the quadratic discriminate analysis**
+
+```{r cps_pca_lda_qad, echo=false}
+set.seed(333)
+cps_pca_mod = princomp(trn.dat.means2, cor=T)
+#plot(cps_pca_mod)
+
+classes.joint = apply(inde.vars[,1:3], 1, paste, collapse = ":")
+```
+
+```{r cps_lda_qda, echo=false}
+accuracies = data.frame()
+set.seed(333)
+lda.mod.group.prin=lda(x=cps_pca_mod$scores[, 1:10], grouping = inde.vars[,1], CV=T)
+lda.prin.group = mean(lda.mod.group.prin$class==inde.vars[,1])
+
+lda.mod.sub.prin=lda(x=cps_pca_mod$scores[, 1:10], grouping = inde.vars[,2], CV=T)
+lda.prin.sub = mean(lda.mod.sub.prin$class==inde.vars[,2])
+
+lda.mod.con.prin=lda(x=cps_pca_mod$scores[, 1:10], grouping = inde.vars[,3], CV=T)
+lda.prin.con = mean(lda.mod.con.prin$class==inde.vars[,3])
+
+lda.mod.joint.prin = lda(x=cps_pca_mod$scores[,1:10], grouping = classes.joint, CV=T)
+lda.prin.joint = mean(lda.mod.joint.prin$class==classes.joint)
+
+qda.mod.group.prin=qda(x=cps_pca_mod$scores[, 1:10], grouping = inde.vars[,1], CV=T)
+temp = as.character(qda.mod.group.prin$class)==inde.vars[,1]
+qda.prin.group = table(temp)["TRUE"]/length(temp)
+
+qda.mod.sub.prin=qda(x=cps_pca_mod$scores[, 1:10], grouping = inde.vars[,2], CV=T)
+temp = as.character(qda.mod.sub.prin$class)==inde.vars[,2]
+qda.prin.sub = table(temp)["TRUE"]/length(temp)
+
+qda.mod.con.prin=qda(x=cps_pca_mod$scores[, 1:10], grouping = inde.vars[,3], CV=T)
+temp = as.character(qda.mod.con.prin$class)==inde.vars[,3]
+qda.prin.con = table(temp)["TRUE"]/length(temp)
+
+#qda on joint gives error that it is too small
+#qda.mod.joint.prin = qda(x=cps_pca_mod$scores[,1:10], grouping = classes.joint, CV=T)
+#qda.prin.joint = mean(qda.mod.joint.prin$class==classes.joint)
+
+cps_pca_lda = c(lda.prin.group,
+                lda.prin.sub,
+                lda.prin.con,
+                lda.prin.joint)
+cps_pca_qda = c(qda.prin.group,
+                qda.prin.sub,
+                qda.prin.con,
+                NA)
+accuracies = rbind(accuracies,
+                   cps_pca_lda,
+                   cps_pca_qda)
+colnames(accuracies) = c("Group", "Subject", "Condition", "Joint")
+row.names(accuracies)[1] = "LDA PCA (cps baseline)"
+row.names(accuracies)[2] = "QDA PCA (cps baseline)"
+```
+
+So these are the accuracies to beat through other methods or further exploration. The next thing that I tried to do was remove other varaibles that didn't *appear* to show separation in the box plots that were used in the 'Playing with Data' code. This was only for `group` separation, however. The columns that visually appeared to have no separation were `PeakVerticalVelocity`, `HorizontalSize`, `AverageNormalizedyJerkPerTrial`, `AbsoluteJerk`, `AverageNormalizedJerkPerTrial`, `NumberOfPeakAccelerationPoints`, and `AveragePenPressure`. This resulted in a higher increase in accuracies for `group` and `condition` but not for the `subject` or `joint` response variable.
+
+```{r no_seq_removed_pca_lda_qda, echo=false}
+set.seed(333)
+cps_pca_sep_mod = princomp(trn.dat.means3, cor=T)
+
+lda.mod.group.prin=lda(x=cps_pca_sep_mod$scores[, 1:10], grouping = inde.vars[,1], CV=T)
+lda.prin.group = mean(lda.mod.group.prin$class==inde.vars[,1])
+
+lda.mod.sub.prin=lda(x=cps_pca_sep_mod$scores[, 1:10], grouping = inde.vars[,2], CV=T)
+lda.prin.sub = mean(lda.mod.sub.prin$class==inde.vars[,2])
+
+lda.mod.con.prin=lda(x=cps_pca_sep_mod$scores[, 1:10], grouping = inde.vars[,3], CV=T)
+lda.prin.con = mean(lda.mod.con.prin$class==inde.vars[,3])
+
+lda.mod.joint.prin = lda(x=cps_pca_sep_mod$scores[,1:10], grouping = classes.joint, CV=T)
+lda.prin.joint = mean(lda.mod.joint.prin$class==classes.joint)
+
+qda.mod.group.prin=qda(x=cps_pca_sep_mod$scores[, 1:10], grouping = inde.vars[,1], CV=T)
+temp = as.character(qda.mod.group.prin$class)==inde.vars[,1]
+qda.prin.group = table(temp)["TRUE"]/length(temp)
+
+qda.mod.sub.prin=qda(x=cps_pca_sep_mod$scores[, 1:10], grouping = inde.vars[,2], CV=T)
+temp = as.character(qda.mod.sub.prin$class)==inde.vars[,2]
+qda.prin.sub = table(temp)["TRUE"]/length(temp)
+
+qda.mod.con.prin=qda(x=cps_pca_sep_mod$scores[, 1:10], grouping = inde.vars[,3], CV=T)
+temp = as.character(qda.mod.con.prin$class)==inde.vars[,3]
+qda.prin.con = table(temp)["TRUE"]/length(temp)
+
+#qda on joint gives error that it is too small
+#qda.mod.joint.prin = qda(x=cps_pca_sep_mod$scores[,1:10], grouping = classes.joint, CV=T)
+#qda.prin.joint = mean(qda.mod.joint.prin$class==classes.joint)
+
+cps_pca_sep_lda = c(lda.prin.group,
+                lda.prin.sub,
+                lda.prin.con,
+                lda.prin.joint)
+cps_pca_sep_qda = c(qda.prin.group,
+                qda.prin.sub,
+                qda.prin.con,
+                NA)
+accuracies = rbind(accuracies,
+                   cps_pca_sep_lda,
+                   cps_pca_sep_qda)
+colnames(accuracies) = c("Group", "Subject", "Condition", "Joint")
+row.names(accuracies)[3] = "LDA PCA vars with separation"
+row.names(accuracies)[4] = "QDA PCA vars with separation"
+
+acctable = accuracies
+```
+
+With slight improvements in `group` and `condition` but not `subject` or `joint`, I thought another place to look would be using the means themselves in the LDA instead of the principal components, as well as scaling the means. Using the mean values from the variables with visible `group` separation increased the prediction accuracy of `group`, `subject`, `condition`, and `joint` over the use of principal components for the LDA, but the QDA decreased `group` and `subject` accuracies, while slightly boosting `condition`. Adding back in the variables that appeared to have some separation in the boxplots split by `group` increased all 4 response variables when using the LDA and `subject` and `condition` when using QDA. Quadratic discriminate analysis again had shown a decrease in the prediction accuracy for `group` when using the means from the data frame used in class like seen with the means of those variables with some visible separation between the 2 `group` factors - `CUR` and `PRI`. Finally, for LDA and QDA I scaled the means of the data used in class which had minor accuracy increases over the raw means for the LDA's `group` and `condition` (`subject` and `joint` that was the same) where as the QDA didn't change from the unscaled data.
+
+```{r lda_qda_means2_means3_means2scaled, echo=false}
+set.seed(333)
+##using means of variables with visible group separation
+lda.mod.group.mean=lda(x=trn.dat.means3, grouping = inde.vars[,1], CV=T)
+lda.mean.group = mean(lda.mod.group.mean$class==inde.vars[,1])
+
+lda.mod.sub.mean=lda(x=trn.dat.means3, grouping = inde.vars[,2], CV=T)
+lda.mean.sub = mean(lda.mod.sub.mean$class==inde.vars[,2])
+
+lda.mod.con.mean=lda(x=trn.dat.means3, grouping = inde.vars[,3], CV=T)
+lda.mean.con = mean(lda.mod.con.mean$class==inde.vars[,3])
+
+lda.mod.joint.mean=lda(x=trn.dat.means3, grouping = classes.joint, CV=T)
+lda.mean.joint = mean(lda.mod.joint.mean$class==classes.joint)
+
+lda.sep.mean.unscl = c(lda.mean.group, lda.mean.sub, lda.mean.con, lda.mean.joint)
+
+qda.mod.group.mean=qda(x=trn.dat.means3, grouping = inde.vars[,1], CV=T)
+test2=as.character(qda.mod.group.mean$class)==inde.vars[,1]
+qda.mean.group = table(test2)["TRUE"]/length(test2)
+#qda.mean.group = mean(qda.mod.group.mean$class==inde.vars[,1])
+
+qda.mod.sub.mean=qda(x=trn.dat.means3, grouping = inde.vars[,2], CV=T)
+#mean(qda.mod.sub.prin$class==inde.vars[,2])
+test2=as.character(qda.mod.sub.mean$class)==inde.vars[,2]
+qda.mean.sub = table(test2)["TRUE"]/length(test2)
+
+qda.mod.con.mean=qda(x=trn.dat.means3, grouping = inde.vars[,3], CV=T)
+test2=as.character(qda.mod.con.mean$class)==inde.vars[,3]
+qda.mean.con = table(test2)["TRUE"]/length(test2)
+#qda.mean.con = mean(qda.mod.con.mean$class==inde.vars[,3])
+
+qda.sep.mean.unscl = c(qda.mean.group, qda.mean.sub, qda.mean.con, NA)
+
+#####################################################################################################
+
+##using the raw means from the data frame from class
+lda.mod.group.mean=lda(x=trn.dat.means2,grouping = inde.vars[,1], CV=T)
+lda.mean.group = mean(lda.mod.group.mean$class==inde.vars[,1])
+
+lda.mod.sub.mean=lda(x=trn.dat.means2,grouping = inde.vars[,2], CV=T)
+lda.mean.sub = mean(lda.mod.sub.mean$class==inde.vars[,2])
+
+lda.mod.con.mean=lda(x=trn.dat.means2,grouping = inde.vars[,3], CV=T)
+lda.mean.con = mean(lda.mod.con.mean$class==inde.vars[,3])
+
+lda.mod.joint.mean=lda(x=trn.dat.means2, grouping = classes.joint, CV=T)
+lda.mean.joint = mean(lda.mod.joint.mean$class==classes.joint)
+
+lda.cps.mean.unscl = c(lda.mean.group, lda.mean.sub, lda.mean.con, lda.mean.joint)
+
+qda.mod.group.mean=qda(x=trn.dat.means2, grouping = inde.vars[,1], CV=T)
+test2=as.character(qda.mod.group.mean$class)==inde.vars[,1]
+qda.mean.group = table(test2)["TRUE"]/length(test2)
+#qda.mean.group = mean(qda.mod.group.mean$class==inde.vars[,1])
+
+qda.mod.sub.mean=qda(x=trn.dat.means2, grouping = inde.vars[,2], CV=T)
+#mean(qda.mod.sub.prin$class==inde.vars[,2])
+test2=as.character(qda.mod.sub.mean$class)==inde.vars[,2]
+qda.mean.sub = table(test2)["TRUE"]/length(test2)
+
+qda.mod.con.mean=qda(x=trn.dat.means2, grouping = inde.vars[,3], CV=T)
+test2=as.character(qda.mod.con.mean$class)==inde.vars[,3]
+qda.mean.con = table(test2)["TRUE"]/length(test2)
+#qda.mean.con = mean(qda.mod.con.mean$class==inde.vars[,3])
+
+qda.cps.mean.unscl = c(qda.mean.group, qda.mean.sub, qda.mean.con, NA)
+
+#####################################################################################################
+
+##scalig the means of data frame used in class
+trn.dat.means2.scl = scale(trn.dat.means2)
+
+lda.mod.group.mean=lda(x=trn.dat.means2.scl, grouping = inde.vars[,1], CV=T)
+lda.mean.group = mean(lda.mod.group.mean$class==inde.vars[,1])
+
+lda.mod.sub.mean=lda(x=trn.dat.means2.scl, grouping = inde.vars[,2], CV=T)
+lda.mean.sub = mean(lda.mod.sub.mean$class==inde.vars[,2])
+
+lda.mod.con.mean=lda(x=trn.dat.means2.scl, grouping = inde.vars[,3], CV=T)
+lda.mean.con = mean(lda.mod.con.mean$class==inde.vars[,3])
+
+lda.mod.joint.mean=lda(x=trn.dat.means2.scl, grouping = classes.joint, CV=T)
+lda.mean.joint = mean(lda.mod.joint.mean$class==classes.joint)
+
+lda.cps.mean.scl = c(lda.mean.group, lda.mean.sub, lda.mean.con, lda.mean.joint)
+
+qda.mod.group.mean=qda(x=trn.dat.means2.scl, grouping = inde.vars[,1], CV=T)
+test2=as.character(qda.mod.group.mean$class)==inde.vars[,1]
+qda.mean.group = table(test2)["TRUE"]/length(test2)
+#qda.mean.group = mean(qda.mod.group.mean$class==inde.vars[,1])
+
+qda.mod.sub.mean=qda(x=trn.dat.means2.scl, grouping = inde.vars[,2], CV=T)
+#mean(qda.mod.sub.prin$class==inde.vars[,2])
+test2=as.character(qda.mod.sub.mean$class)==inde.vars[,2]
+qda.mean.sub = table(test2)["TRUE"]/length(test2)
+
+qda.mod.con.mean=qda(x=trn.dat.means2.scl, grouping = inde.vars[,3], CV=T)
+test2=as.character(qda.mod.con.mean$class)==inde.vars[,3]
+qda.mean.con = table(test2)["TRUE"]/length(test2)
+#qda.mean.con = mean(qda.mod.con.mean$class==inde.vars[,3])
+
+qda.cps.mean.scl = c(qda.mean.group, qda.mean.sub, qda.mean.con, NA)
+
+accuracies = rbind(accuracies,
+                   lda.sep.mean.unscl,
+                   qda.sep.mean.unscl,
+                   lda.cps.mean.unscl,
+                   qda.cps.mean.unscl,
+                   lda.cps.mean.scl,
+                   qda.cps.mean.scl)
+
+row.names(accuracies)[5] = "LDA on means with separation"
+row.names(accuracies)[6] = "QDA on means with separation"
+row.names(accuracies)[7] = "LDA on class means"
+row.names(accuracies)[8] = "QDA on class means"
+row.names(accuracies)[9] = "LDA on scaled class means"
+row.names(accuracies)[10] = "QDA on scaled class means"
+```
+
+After working with the LDA and QDA above with the column means of the samples, I went with the suggestion given in lecture about logistic regressions. this didn't work for the joint prediction because there were 'too many (12000) weights'. I also did a single non-cross validated approach just to get some kind of an idea and then followed it with a cross validation for better accuracy judgement. The prediction accuracy of `group` and `subject` did increase (the logistic regression without CV was just to see if it was worth looking further into but not itself very trustworthy), and the `condition` accuracy did show an increase but it wasn't as high as the others (`condition` accuracy ended up at only 0.425 while `group` and `subject` were 0.928 and 0.725, respectively). All values were greater than the baseline set in lecture so the logistic regression shows promise.
+
+Single regular `glm` was giving errors, I found the `multinom` logistic regression function which can be used for predicting probabilities of classes for the larger response sizes rather than the response like `glm`. https://www.r-bloggers.com/how-to-multinomial-regression-models-in-r/
+
+```{r logistic_regressions, echo=false, cache=true, message=false, warning=false}
+set.seed(333)
+#adding response variables to the data frames
+group.scaled = as.data.frame(cbind(inde.vars$Group, trn.dat.means2.scl))
+subject.scaled = as.data.frame(cbind(inde.vars$Subject, trn.dat.means2.scl))
+cond.scaled = as.data.frame(cbind(inde.vars$Condition, trn.dat.means2.scl))
+joint.scaled = as.data.frame(cbind(classes.joint, trn.dat.means2.scl))
+
+for(i in 2:length(group.scaled)){
+  group.scaled[,i] = as.numeric(as.character(group.scaled[,i]))
+  subject.scaled[,i] = as.numeric(as.character(subject.scaled[,i]))
+  cond.scaled[,i] = as.numeric(as.character(cond.scaled[,i]))
+  joint.scaled[,i] = as.numeric(as.character(joint.scaled[,i]))
+}
+
+#invisible capture because verbose is annoying and takes more time.
+logreg.group = multinom(V1~., data=group.scaled, trace = false)
+group.preds.log = predict(logreg.group, group.scaled, type="class")
+group.preds.matrix = table(group.preds.log, group.scaled$V1)
+group.log.acc = sum(diag(group.preds.matrix))/sum(group.preds.matrix)
+#group.log.acc
+#0.933
+logreg.subject = multinom(V1~., data=subject.scaled, trace = false)
+subject.preds.log = predict(logreg.subject, subject.scaled, type="class")
+subject.preds.matrix = table(subject.preds.log, subject.scaled$V1)
+subject.log.acc = sum(diag(subject.preds.matrix))/sum(subject.preds.matrix)
+#subject.log.acc
+#0.943
+logreg.cond = multinom(V1~., data=cond.scaled, trace = false)
+cond.preds.log = predict(logreg.cond, cond.scaled, type="class")
+cond.preds.matrix = table(cond.preds.log, cond.scaled$V1)
+cond.log.acc = sum(diag(cond.preds.matrix))/sum(cond.preds.matrix)
+#cond.log.acc
+#0.456
+log.reg.accs = c(group.log.acc, subject.log.acc, cond.log.acc, NA)
+
+group.correct = double()
+subject.correct=double()
+cond.correct = double()
+log.reg.loocv.accs = double()
+
+log.reg.loocv.accs = foreach(i = 1:nrow(group.scaled), .combine = rbind) %dopar% {
+  group.model = glm(V1~., data=group.scaled[-i,], family=binomial())
+  group.preds = predict(group.model, group.scaled[i,], type="response")
+  group.preds2 = ifelse(0.5>group.preds, "CUR","PRI")
+  group.correct = group.preds2==group.scaled[i,]$V1
+  
+  subject.model <- nnet::multinom(V1~., data=subject.scaled[-i,], trace = false)
+  subject.preds = predict(subject.model, subject.scaled[i,], type="probs")
+  subject.correct = names(which.max(subject.preds)) == subject.scaled[i,]$V1
+  
+  cond.model <- nnet::multinom(V1~., data=cond.scaled[-i,], trace = false)
+  cond.preds = predict(cond.model, cond.scaled[i,], type="probs")
+  cond.correct = names(which.max(cond.preds)) == cond.scaled[i,]$V1
+  
+  c(group.correct, subject.correct, cond.correct, NA)
+}
+#row means for the loocv accuracies
+log.reg.loocv.accs.means = colMeans(log.reg.loocv.accs)
+```
+
+```{r logistic_regression_accuracies, echo=false}
+set.seed(333)
+accuracies = rbind(accuracies,
+                   log.reg.accs,
+                   log.reg.loocv.accs.means)
+row.names(accuracies)[11] = "One shot Logistic Regression (no CV) scaled class"
+row.names(accuracies)[12] = "Logistic Regression LOOCV scaled class"
+
+```
+
+Another avenue that I have used for classifications in the past was using neural networks. The `nerualnet` package makes this relatively easy without having to code perceptrons from scratch (actually taught how to do that on codecademy under the data science path for python) along with a bunch of customizations. Looking at some of the recommendations for how big to make the hidden layer, a stack overflow poster had said that good guidelines are 2/3 the input + the output, somewhere between the input shape and output shape, or no more than twice the input. I chose to go with 15 as a round number that was close to the 2/3 input + output for `group` and maintained it for the others. The input data was also normalized (have read some other places this is good practice so it doesn't put inappropriate weights in certain variables and they all start on a "level" playing field). The accuracy of the neural net is surprisingly well for the `group` and `subject` (since the condition failed to converge) with 0.931 and 0.621, respectively. This is better than the baselines, however with `condition` and `joint` not converging it doesn't warrant further investigation at this time. With different parameteters this may be possible. https://stats.stackexchange.com/questions/181/how-to-choose-the-number-of-hidden-layers-and-nodes-in-a-feedforward-neural-netw
+
+```{r neural_networks, echo=false, cache=true}
+set.seed(333)
+
+groups = c("CUR","PRI")
+subjects = levels(subject.scaled$V1)
+
+group.correct = double()
+subject.correct=double()
+cond.correct = double()
+nn.correct = double()
+
+runs = seq(1, nrow(group.scaled), 25)
+set.seed(333)
+nn.correct = foreach(i = runs, .combine = rbind) %dopar% {
+  set.seed(333)
+  group.net = neuralnet::neuralnet(V1~.,
+                        data=group.scaled[-i,],
+                        hidden = 15,
+                        err.fct = 'sse',
+                        linear.output = FALSE)
+  group.ouput = neuralnet::compute(group.net, group.scaled[i,])
+  colnames(group.ouput$net.result) = groups
+  group.correct = groups[which.max(group.ouput$net.result)] == group.scaled[i,]$V1
+  
+  subject.net = neuralnet::neuralnet(V1~.,
+                          data=subject.scaled[-i,],
+                          hidden = 15,
+                          err.fct = 'sse',
+                          linear.output = FALSE)
+  subject.ouput = neuralnet::compute(subject.net, subject.scaled[i,])
+  colnames(subject.ouput$net.result) = subjects
+  subject.correct = subjects[which.max(subject.ouput$net.result)] == subject.scaled[i,]$V1
+  
+  c(group.correct, subject.correct)
+}
+
+nn.correct.means = colMeans(nn.correct)
+nn.correct.means = c(nn.correct.means, NA, NA)
+```
+
+```{r neural_networks_accuracies, echo=false}
+set.seed(333)
+
+accuracies = rbind(accuracies,
+                   nn.correct.means)
+row.names(accuracies)[13] = "Neural net LOOCV (1/25)"
+```
+
+Following the logistic regression, I thought maybe looking at a KNN set of models would provide a good way to classify. For KNN, I used the means data frame that was constructed from the 'Playing with data' along with the scaled verson of the means using `scale`. The unscaled accuracy with $K=1$ was lower for all response combinations than was the scaled data. The best joint prediction came from $K=1$ for the scaled data where the model achieved an accuracy of 0.342. Other combinations included `group:subject` where the highest accuracy was 0.609 for $K=1$, `group:condition` with a best accuracy of 0.465 with $K=1$, and `subject:condition` with a best accuracy of 0.346 on the scaled data with $K=1$. The scaled data also performed better with just the single response variables, and with $K=1$. Response `group` was 0.935, `subject` was 0.624, and `condition` was 0.481.
+
+```{r knns, echo=false, cache=true}
+set.seed(333)
+knn1.unscl.correct = double()
+knn2.unscl.correct = double()
+knn1.scl.correct = double()
+knn2.scl.correct = double()
+knn.correct = double()
+classes.joint=apply(inde.vars[,c(1,2,3)], 1, paste, collapse = ":")
+knn.correct = foreach(i = seq(classes.joint), .combine = rbind) %dopar% {
+  set.seed(333)
+  knn.prin.matrix = as.matrix(trn.dat.means2[-i,])
+  knn.labs = classes.joint[-i]
+  knn.prin.test = t(as.matrix(trn.dat.means2[i,]))
+  
+  knn.prin.joint = class::knn(knn.prin.matrix, knn.prin.test, knn.labs, k=1)
+  knn1.unscl.correct = knn.prin.joint == classes.joint[i]
+  knn.prin.joint = class::knn(knn.prin.matrix, knn.prin.test, knn.labs, k=2)
+  knn2.unscl.correct = knn.prin.joint == classes.joint[i]
+  
+  
+  knn.prin.matrix = as.matrix(trn.dat.means2.scl[-i,])
+  knn.prin.test = t(as.matrix(trn.dat.means2.scl[i,]))
+  knn.prin.joint = class::knn(knn.prin.matrix, knn.prin.test, knn.labs, k=1)
+  knn1.scl.correct = knn.prin.joint == classes.joint[i]
+  knn.prin.joint = class::knn(knn.prin.matrix, knn.prin.test, knn.labs, k=2)
+  knn2.scl.correct = knn.prin.joint == classes.joint[i]
+  
+  c(knn1.unscl.correct, knn2.unscl.correct, knn1.scl.correct, knn2.scl.correct)
+}
+knn.g.s.c.acc = colMeans(knn.correct)
+
+knn1.unscl.correct = double()
+knn2.unscl.correct = double()
+knn1.scl.correct = double()
+knn2.scl.correct = double()
+knn.correct = double()
+classes.joint=apply(inde.vars[,c(1,2)], 1, paste, collapse = ":")
+knn.correct = foreach(i = seq(classes.joint), .combine = rbind) %dopar% {
+  set.seed(333)
+  knn.prin.matrix = as.matrix(trn.dat.means2[-i,])
+  knn.labs = classes.joint[-i]
+  knn.prin.test = t(as.matrix(trn.dat.means2[i,]))
+  
+  knn.prin.joint = class::knn(knn.prin.matrix, knn.prin.test, knn.labs, k=1)
+  knn1.unscl.correct = knn.prin.joint == classes.joint[i]
+  knn.prin.joint = class::knn(knn.prin.matrix, knn.prin.test, knn.labs, k=2)
+  knn2.unscl.correct = knn.prin.joint == classes.joint[i]
+  
+  
+  knn.prin.matrix = as.matrix(trn.dat.means2.scl[-i,])
+  knn.prin.test = t(as.matrix(trn.dat.means2.scl[i,]))
+  knn.prin.joint = class::knn(knn.prin.matrix, knn.prin.test, knn.labs, k=1)
+  knn1.scl.correct = knn.prin.joint == classes.joint[i]
+  knn.prin.joint = class::knn(knn.prin.matrix, knn.prin.test, knn.labs, k=2)
+  knn2.scl.correct = knn.prin.joint == classes.joint[i]
+  
+  c(knn1.unscl.correct, knn2.unscl.correct, knn1.scl.correct, knn2.scl.correct)
+}
+knn.g.s.acc = colMeans(knn.correct)
+
+knn1.unscl.correct = double()
+knn2.unscl.correct = double()
+knn1.scl.correct = double()
+knn2.scl.correct = double()
+knn.correct = double()
+classes.joint=apply(inde.vars[,c(1,3)], 1, paste, collapse = ":")
+knn.correct = foreach(i = seq(classes.joint), .combine = rbind) %dopar% {
+  set.seed(333)
+  knn.prin.matrix = as.matrix(trn.dat.means2[-i,])
+  knn.labs = classes.joint[-i]
+  knn.prin.test = t(as.matrix(trn.dat.means2[i,]))
+  
+  knn.prin.joint = class::knn(knn.prin.matrix, knn.prin.test, knn.labs, k=1)
+  knn1.unscl.correct = knn.prin.joint == classes.joint[i]
+  knn.prin.joint = class::knn(knn.prin.matrix, knn.prin.test, knn.labs, k=2)
+  knn2.unscl.correct = knn.prin.joint == classes.joint[i]
+  
+  
+  knn.prin.matrix = as.matrix(trn.dat.means2.scl[-i,])
+  knn.prin.test = t(as.matrix(trn.dat.means2.scl[i,]))
+  knn.prin.joint = class::knn(knn.prin.matrix, knn.prin.test, knn.labs, k=1)
+  knn1.scl.correct = knn.prin.joint == classes.joint[i]
+  knn.prin.joint = class::knn(knn.prin.matrix, knn.prin.test, knn.labs, k=2)
+  knn2.scl.correct = knn.prin.joint == classes.joint[i]
+  
+  c(knn1.unscl.correct, knn2.unscl.correct, knn1.scl.correct, knn2.scl.correct)
+}
+knn.g.c.acc = colMeans(knn.correct)
+
+knn1.unscl.correct = double()
+knn2.unscl.correct = double()
+knn1.scl.correct = double()
+knn2.scl.correct = double()
+knn.correct = double()
+classes.joint=apply(inde.vars[,c(2,3)], 1, paste, collapse = ":")
+knn.correct = foreach(i = seq(classes.joint), .combine = rbind) %dopar% {
+  set.seed(333)
+  knn.prin.matrix = as.matrix(trn.dat.means2[-i,])
+  knn.labs = classes.joint[-i]
+  knn.prin.test = t(as.matrix(trn.dat.means2[i,]))
+  
+  knn.prin.joint = class::knn(knn.prin.matrix, knn.prin.test, knn.labs, k=1)
+  knn1.unscl.correct = knn.prin.joint == classes.joint[i]
+  knn.prin.joint = class::knn(knn.prin.matrix, knn.prin.test, knn.labs, k=2)
+  knn2.unscl.correct = knn.prin.joint == classes.joint[i]
+  
+  
+  knn.prin.matrix = as.matrix(trn.dat.means2.scl[-i,])
+  knn.prin.test = t(as.matrix(trn.dat.means2.scl[i,]))
+  knn.prin.joint = class::knn(knn.prin.matrix, knn.prin.test, knn.labs, k=1)
+  knn1.scl.correct = knn.prin.joint == classes.joint[i]
+  knn.prin.joint = class::knn(knn.prin.matrix, knn.prin.test, knn.labs, k=2)
+  knn2.scl.correct = knn.prin.joint == classes.joint[i]
+  
+  c(knn1.unscl.correct, knn2.unscl.correct, knn1.scl.correct, knn2.scl.correct)
+}
+knn.s.c.acc = colMeans(knn.correct)
+
+knn1.unscl.correct = double()
+knn2.unscl.correct = double()
+knn1.scl.correct = double()
+knn2.scl.correct = double()
+knn.correct = double()
+classes.joint=inde.vars[,1]
+knn.correct = foreach(i = seq(classes.joint), .combine = rbind) %dopar% {
+  set.seed(333)
+  knn.prin.matrix = as.matrix(trn.dat.means2[-i,])
+  knn.labs = classes.joint[-i]
+  knn.prin.test = t(as.matrix(trn.dat.means2[i,]))
+  
+  knn.prin.joint = class::knn(knn.prin.matrix, knn.prin.test, knn.labs, k=1)
+  knn1.unscl.correct = knn.prin.joint == classes.joint[i]
+  knn.prin.joint = class::knn(knn.prin.matrix, knn.prin.test, knn.labs, k=2)
+  knn2.unscl.correct = knn.prin.joint == classes.joint[i]
+  
+  
+  knn.prin.matrix = as.matrix(trn.dat.means2.scl[-i,])
+  knn.prin.test = t(as.matrix(trn.dat.means2.scl[i,]))
+  knn.prin.joint = class::knn(knn.prin.matrix, knn.prin.test, knn.labs, k=1)
+  knn1.scl.correct = knn.prin.joint == classes.joint[i]
+  knn.prin.joint = class::knn(knn.prin.matrix, knn.prin.test, knn.labs, k=2)
+  knn2.scl.correct = knn.prin.joint == classes.joint[i]
+  
+  c(knn1.unscl.correct, knn2.unscl.correct, knn1.scl.correct, knn2.scl.correct)
+}
+knn.g.acc = colMeans(knn.correct)
+
+knn1.unscl.correct = double()
+knn2.unscl.correct = double()
+knn1.scl.correct = double()
+knn2.scl.correct = double()
+knn.correct = double()
+classes.joint=inde.vars[,2]
+knn.correct = foreach(i = seq(classes.joint), .combine = rbind) %dopar% {
+  set.seed(333)
+  knn.prin.matrix = as.matrix(trn.dat.means2[-i,])
+  knn.labs = classes.joint[-i]
+  knn.prin.test = t(as.matrix(trn.dat.means2[i,]))
+  
+  knn.prin.joint = class::knn(knn.prin.matrix, knn.prin.test, knn.labs, k=1)
+  knn1.unscl.correct = knn.prin.joint == classes.joint[i]
+  knn.prin.joint = class::knn(knn.prin.matrix, knn.prin.test, knn.labs, k=2)
+  knn2.unscl.correct = knn.prin.joint == classes.joint[i]
+  
+  
+  knn.prin.matrix = as.matrix(trn.dat.means2.scl[-i,])
+  knn.prin.test = t(as.matrix(trn.dat.means2.scl[i,]))
+  knn.prin.joint = class::knn(knn.prin.matrix, knn.prin.test, knn.labs, k=1)
+  knn1.scl.correct = knn.prin.joint == classes.joint[i]
+  knn.prin.joint = class::knn(knn.prin.matrix, knn.prin.test, knn.labs, k=2)
+  knn2.scl.correct = knn.prin.joint == classes.joint[i]
+  
+  c(knn1.unscl.correct, knn2.unscl.correct, knn1.scl.correct, knn2.scl.correct)
+}
+knn.s.acc = colMeans(knn.correct)
+
+knn1.unscl.correct = double()
+knn2.unscl.correct = double()
+knn1.scl.correct = double()
+knn2.scl.correct = double()
+knn.correct = double()
+classes.joint=inde.vars[,3]
+knn.correct = foreach(i = seq(classes.joint), .combine = rbind) %dopar% {
+  set.seed(333)
+  knn.prin.matrix = as.matrix(trn.dat.means2[-i,])
+  knn.labs = classes.joint[-i]
+  knn.prin.test = t(as.matrix(trn.dat.means2[i,]))
+  
+  knn.prin.joint = class::knn(knn.prin.matrix, knn.prin.test, knn.labs, k=1)
+  knn1.unscl.correct = knn.prin.joint == classes.joint[i]
+  knn.prin.joint = class::knn(knn.prin.matrix, knn.prin.test, knn.labs, k=2)
+  knn2.unscl.correct = knn.prin.joint == classes.joint[i]
+  
+  
+  knn.prin.matrix = as.matrix(trn.dat.means2.scl[-i,])
+  knn.prin.test = t(as.matrix(trn.dat.means2.scl[i,]))
+  knn.prin.joint = class::knn(knn.prin.matrix, knn.prin.test, knn.labs, k=1)
+  knn1.scl.correct = knn.prin.joint == classes.joint[i]
+  knn.prin.joint = class::knn(knn.prin.matrix, knn.prin.test, knn.labs, k=2)
+  knn2.scl.correct = knn.prin.joint == classes.joint[i]
+  
+  c(knn1.unscl.correct, knn2.unscl.correct, knn1.scl.correct, knn2.scl.correct)
+}
+knn.c.acc = colMeans(knn.correct)
+
+knn.accuracies = double()
+knn.accuracies = rbind(knn.g.s.c.acc,
+                       knn.g.s.acc,
+                       knn.g.c.acc,
+                       knn.s.c.acc,
+                       knn.g.acc,
+                       knn.s.acc,
+                       knn.c.acc)
+colnames(knn.accuracies) = c("K=1_Unscaled",
+                             "K=2_Unscaled",
+                             "K=1_Scaled",
+                             "K=2_Scaled")
+kable((knn.accuracies)
+      #, "latex"
+      , caption = 'KNN accuracies of K=1 and K=2 for both scaled and unscaled means data.'
+      #,booktabs = T
+      ) %>%
+  kable_styling(latex_options = c("striped", "repeat_header", "HOLD_position"), font_size = 10)
+```
+
+When all of the previous methods weren't able to get the `condition` accuracy up higher than 0.425 (LOOCV logistic regression), I thought it would be good to go back to the beginning and push further with descriptive statistcs than what was done in lecture. At first I tried to use a package called `featuretoolsR`, but there is something that doesn't work right with the backend and `reticulate` to port into python (https://github.com/magnusfurugard/featuretoolsR). Here, I used the `matrixStats` package to compute MovAlyzR variable summaries by trial for mean, median, variance, standard deviation, interquartile range, range, min, and max. After computing that for each of the output variables, the data frame is now 200 predictors, but there are some that have no real use and can be removed by checking if the variance is zero and if so, remove it. The remaining table has 178 predictors (22 columns had a variance of 0 and therefore no difference between all of the samples [rows]) were used for pca and the different components were looped through to determine the best number for the particular response. Using these metrics as predictors for `group`, `subject`, `condition`, and `joint` proved fairly effective with accuracies of 0.9597, 0.86944, 0.7201, and 0.7076, respectively. So it looks as though an LDA taking more information about the original data is more powerful than just means.
+
+```{r descriptive_statistics_prep_1, cache=true, echo=false}
+set.seed(333)
+
+trn.dat.summarys=NULL
+inde.vars=NULL
+index.var=apply(lab.dat[,1:4], 1, paste, collapse=":")
+
+uni.vars = unique(index.var)
+#ind.gro.sub = unique(group.subject)
+
+#using the MatrixStats package to add the descriptive statistics
+for(i in uni.vars){
+  temp = double()
+  trn.dat.i=lab.dat[i==index.var, ]
+  trn.mean.i=colMeans(trn.dat.i[,-(1:5)])
+  trn.median.i = colMedians(as.matrix(trn.dat.i[,-(1:5)]))
+  trn.var.i = colVars(as.matrix(trn.dat.i[,-(1:5)]))
+  trn.sd.i = colSds(as.matrix(trn.dat.i[,-(1:5)]))
+  trn.iqr.i = colIQRs(as.matrix(trn.dat.i[,-(1:5)]))
+  trn.range.i = colRanges(as.matrix(trn.dat.i[,-(1:5)]))
+  trn.mins.i = colMins(as.matrix(trn.dat.i[,-(1:5)]))
+  trn.max.i = colMaxs(as.matrix(trn.dat.i[,-(1:5)]))
+  inde.vars=rbind(inde.vars, trn.dat.i[1,(1:4)])
+  for(j in 1:length(trn.mean.i)){
+    temp = c(temp, trn.mean.i[j], trn.median.i[j], trn.var.i[j], trn.sd.i[j], trn.iqr.i[j], trn.range.i[j], trn.mins.i[j], trn.max.i[j])
+  }
+  trn.dat.summarys=rbind(trn.dat.summarys, temp)
+}
+
+classes.joint = apply(inde.vars[,1:3], 1, paste, collapse = ":")
+
+#remove the columns that have zero variance (constant)
+trn.dat.summarys.1 = as.data.frame(trn.dat.summarys[,apply(trn.dat.summarys, 2, var, na.rm=TRUE) != 0])
+#(dim(trn.dat.summarys)-dim(trn.dat.summarys.1))[2]
+
+#PCA on new data
+set.seed(333)
+prin.com.sum.mod = princomp(trn.dat.summarys.1, cor=T)
+plot(prin.com.sum.mod)
+```
+Figure 1: Principal components of the descriptive statistics values for the 23 columns used in lecture (mean, median, variance, standard deviation, interquartile range, range, min, and max).
+
+```{r descriptive_statistics_ldaing_1, cache=true, echo=false}
+set.seed(333)
+
+group.acc = double()
+subject.acc = double()
+cond.acc = double()
+joint.acc = double()
+all.accs = double()
+#for(i in 2:150){
+all.accs = foreach(i = 2:150, .combine = rbind) %dopar%{
+  set.seed(333)
+  lda.sum.group.prin = MASS::lda(x=prin.com.sum.mod$scores[,1:i],grouping=inde.vars[,1], CV=T)
+  lda.sum.group = mean(lda.sum.group.prin$class == inde.vars[,1])
+  #group.acc = c(group.acc, lda.sum.group)
+  
+  set.seed(333)
+  lda.sum.sub.prin = MASS::lda(x=prin.com.sum.mod$scores[,1:i], grouping=inde.vars[,2], CV=T)
+  lda.sum.sub = mean(lda.sum.sub.prin$class == inde.vars[,2])
+  #subject.acc = c(subject.acc, lda.sum.sub)
+  
+  set.seed(333)
+  lda.sum.cond.prin = MASS::lda(x=prin.com.sum.mod$scores[,1:i], grouping=inde.vars[,3], CV=T)
+  lda.sum.cond = mean(lda.sum.cond.prin$class == inde.vars[,3])
+  #cond.acc = c(cond.acc, lda.sum.cond)
+  
+  set.seed(333)
+  lda.sum.joint.prin = MASS::lda(x=prin.com.sum.mod$scores[,1:i], grouping=classes.joint, CV=T)
+  lda.sum.joint = mean(lda.sum.joint.prin$class == classes.joint)
+  #joint.acc = c(joint.acc, lda.sum.joint)
+  
+  c(lda.sum.group, lda.sum.sub, lda.sum.cond, lda.sum.joint)
+  #print(i)
+}
+
+dslda1 = c(
+#which.max(group.acc)
+all.accs[,1][which.max(all.accs[,1])],
+#which.max(subject.acc1)
+all.accs[,2][which.max(all.accs[,2])],
+#which.max(cond.acc1)
+all.accs[,3][which.max(all.accs[,3])],
+#which.max(joint.acc1)
+all.accs[,4][which.max(all.accs[,4])]
+)
+```
+
+```{r adding_descrip_1_to_accuracies, echo=false}
+
+accuracies = rbind(accuracies,
+                   dslda1)
+row.names(accuracies)[14] = "LDA Descriptive Stats - 1"
+```
+
+On top of just using the values mentioned above, I used the `e1071` package to calculate the column skewness, and kurtosis, while adding median absolute deviation from the `matrixStats` package. After computing these for each column, there were now 34 columns that were removed for having a variance of 0. Adding these extra descriptors increased the accuracy of the three response variables independently, but not the `joint` response which decreased from 0.7076 to 0.6813, which is higher than the baseline from lecture. *With these descriptive data, I attempted XGBoost with high number of K-fold (attempt to get close to LOOCV) but is computationally expensive for only about 30% at best prediction accuracy.*
+
+**Predictions for the unlabeled data - Using the first descriptive statistics LDA model, the prediction accuracy I would expect to be similar to the test since that was from LOOCV. To be conservative, I would expect predictions for `group` to be around 90%, `subject` around 80%, while `condition` and `joint` accuracy around 70%. To make the predictions, the testing data will be used in two steps with `predict()`; first with the prinipal component models, then with the LDA models to arrive at the final predicted classes.**
+
+```{r descriptive_statistics_prep_2, cache=true, cache=true, echo=false}
+set.seed(333)
+trn.dat.summarys=NULL
+inde.vars=NULL
+
+index.var=apply(lab.dat[,1:4], 1, paste, collapse=":")
+
+uni.vars = unique(index.var)
+
+#using the MatrixStats package to 
+for(i in uni.vars){
+  temp = double()
+  trn.dat.i=lab.dat[i==index.var, ]
+  trn.mean.i=colMeans(trn.dat.i[,-(1:5)])
+  trn.median.i = colMedians(as.matrix(trn.dat.i[,-(1:5)]))
+  trn.var.i = colVars(as.matrix(trn.dat.i[,-(1:5)]))
+  trn.sd.i = colSds(as.matrix(trn.dat.i[,-(1:5)]))
+  trn.iqr.i = colIQRs(as.matrix(trn.dat.i[,-(1:5)]))
+  trn.range.i = colRanges(as.matrix(trn.dat.i[,-(1:5)]))
+  trn.mins.i = colMins(as.matrix(trn.dat.i[,-(1:5)]))
+  trn.max.i = colMaxs(as.matrix(trn.dat.i[,-(1:5)]))
+  trn.skewness.i = apply(as.matrix(trn.dat.i[,-(1:5)]), 2, skewness, na.rm=TRUE)
+  trn.kurtosis.i = apply(as.matrix(trn.dat.i[,-(1:5)]), 2, kurtosis, na.rm=TRUE)
+  trn.mad.i = colMads(as.matrix(trn.dat.i[,-(1:5)]))
+  inde.vars=rbind(inde.vars, trn.dat.i[1,(1:4)])
+  for(j in 1:length(trn.mean.i)){
+    temp = c(temp, trn.mean.i[j], trn.median.i[j], trn.var.i[j], trn.sd.i[j], trn.iqr.i[j], trn.range.i[j], trn.mins.i[j], trn.max.i[j], trn.skewness.i[j], trn.kurtosis.i[j], trn.mad.i[j])
+  }
+  #temp = c(temp, nrow(as.matrix(trn.dat.i[,-(1:5)])))
+  trn.dat.summarys=rbind(trn.dat.summarys, temp)
+}
+
+#remove the columns that have zero variance (constant)
+trn.dat.summarys.1 = as.data.frame(trn.dat.summarys[,apply(trn.dat.summarys, 2, var, na.rm=TRUE) != 0])
+trn.dat.summarys.1 = trn.dat.summarys.1[,is.finite(colSums(trn.dat.summarys.1))]
+#dim(trn.dat.summarys)-dim(trn.dat.summarys.1)
+
+#PCA on new data
+set.seed(333)
+prin.com.sum.mod = princomp(trn.dat.summarys.1, cor=T)
+plot(prin.com.sum.mod)
+
+```
+Figure 2: Principal components of the descriptive statistics values for the 23 columns used in lecture (mean, median, variance, standard deviation, interquartile range, range, min, max, skewness, kurtosis and median absolute deviation).
+
+```{r descriptive_statistics_ldaing_2, cache=true, echo=false}
+set.seed(333)
+
+group.acc = double()
+subject.acc = double()
+cond.acc = double()
+joint.acc = double()
+all.accs = double()
+#for(i in 2:150){
+all.accs = foreach(i = 2:213, .combine = rbind) %dopar%{
+  set.seed(333)
+  lda.sum.group.prin = MASS::lda(x=prin.com.sum.mod$scores[,1:i],grouping=inde.vars[,1], CV=T)
+  lda.sum.group = mean(lda.sum.group.prin$class == inde.vars[,1])
+  #group.acc = c(group.acc, lda.sum.group)
+  
+  set.seed(333)
+  lda.sum.sub.prin = MASS::lda(x=prin.com.sum.mod$scores[,1:i], grouping=inde.vars[,2], CV=T)
+  lda.sum.sub = mean(lda.sum.sub.prin$class == inde.vars[,2])
+  #subject.acc = c(subject.acc, lda.sum.sub)
+  
+  set.seed(333)
+  lda.sum.cond.prin = MASS::lda(x=prin.com.sum.mod$scores[,1:i], grouping=inde.vars[,3], CV=T)
+  lda.sum.cond = mean(lda.sum.cond.prin$class == inde.vars[,3])
+  #cond.acc = c(cond.acc, lda.sum.cond)
+  
+  set.seed(333)
+  lda.sum.joint.prin = MASS::lda(x=prin.com.sum.mod$scores[,1:i], grouping=classes.joint, CV=T)
+  lda.sum.joint = mean(lda.sum.joint.prin$class == classes.joint)
+  #joint.acc = c(joint.acc, lda.sum.joint)
+  
+  c(lda.sum.group, lda.sum.sub, lda.sum.cond, lda.sum.joint)
+  #print(i)
+}
+
+dslda2 = c(
+#which.max(group.acc)
+all.accs[,1][which.max(all.accs[,1])],
+#which.max(subject.acc1)
+all.accs[,2][which.max(all.accs[,2])],
+#which.max(cond.acc1)
+all.accs[,3][which.max(all.accs[,3])],
+#which.max(joint.acc1)
+all.accs[,4][which.max(all.accs[,4])]
+)
+
+```
+
+```{r adding_descrip_2_to_accuracies, echo=false}
+
+accuracies = rbind(accuracies,
+                   dslda2)
+row.names(accuracies)[15] = "LDA Descriptive Stats - 2"
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r , cache=true, echo=false}
+set.seed(333)
+
+```
+
+```{r , echo=false}
+set.seed(333)
+
+kable(accuracies
+      #, "latex"
+      , caption = ''
+      #,booktabs = T
+      ) %>%
+  kable_styling(latex_options = c("striped", "repeat_header", "HOLD_position"), font_size = 10)
+
+```
